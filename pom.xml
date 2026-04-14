@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.localdiscovery</groupId>
+    <artifactId>local-discovery</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <name>Local Discovery</name>
+    <description>零侵入的本地微服务注册发现工具</description>
+
+    <modules>
+        <module>local-registry</module>
+        <module>local-discovery-agent</module>
+    </modules>
+
+    <properties>
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <netty.version>4.1.112.Final</netty.version>
+        <snakeyaml.version>2.2</snakeyaml.version>
+    </properties>
+</project>

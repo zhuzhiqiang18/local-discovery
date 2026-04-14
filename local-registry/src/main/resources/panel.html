@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Discovery Registry</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a; color: #e2e8f0; min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-bottom: 1px solid #334155;
+            padding: 20px 32px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .header h1 { font-size: 20px; font-weight: 600; color: #f1f5f9; }
+        .header h1 span { color: #38bdf8; }
+        .stats { display: flex; gap: 24px; }
+        .stat { text-align: center; }
+        .stat-value { font-size: 24px; font-weight: 700; color: #38bdf8; }
+        .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 24px; }
+        .card {
+            background: #1e293b; border: 1px solid #334155;
+            border-radius: 12px; margin-bottom: 24px; overflow: hidden;
+        }
+        .card-header {
+            padding: 16px 20px; border-bottom: 1px solid #334155;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-header h2 { font-size: 15px; font-weight: 600; color: #f1f5f9; }
+        .card-body { padding: 16px 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 600;
+            color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
+            border-bottom: 1px solid #334155;
+        }
+        td { padding: 12px; font-size: 14px; border-bottom: 1px solid #1e293b40; }
+        tr:hover td { background: #1e293b80; }
+        .tag {
+            display: inline-block; padding: 2px 10px; border-radius: 9999px;
+            font-size: 12px; font-weight: 500;
+        }
+        .tag-up { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+        .tag-down { background: #450a0a; color: #f87171; border: 1px solid #991b1b; }
+        .tag-disabled { background: #1c1917; color: #a8a29e; border: 1px solid #44403c; }
+        .btn {
+            padding: 6px 14px; border: none; border-radius: 6px;
+            font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+        }
+        .btn:hover { filter: brightness(1.15); }
+        .btn-primary { background: #0ea5e9; color: #fff; }
+        .btn-danger { background: #dc2626; color: #fff; }
+        .btn-warning { background: #d97706; color: #fff; }
+        .btn-success { background: #16a34a; color: #fff; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .btn-group { display: flex; gap: 6px; }
+        .form-row {
+            display: flex; gap: 10px; align-items: center; padding: 12px 0;
+        }
+        .form-row input {
+            flex: 1; padding: 8px 12px; background: #0f172a;
+            border: 1px solid #334155; border-radius: 6px;
+            color: #e2e8f0; font-size: 14px; outline: none;
+        }
+        .form-row input:focus { border-color: #0ea5e9; }
+        .form-row input::placeholder { color: #475569; }
+        .empty { text-align: center; padding: 40px; color: #475569; font-size: 14px; }
+        .heartbeat-bar {
+            width: 60px; height: 6px; border-radius: 3px; background: #334155; overflow: hidden;
+            display: inline-block; vertical-align: middle; margin-left: 6px;
+        }
+        .heartbeat-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+            border-radius: 8px; font-size: 14px; color: #fff;
+            opacity: 0; transform: translateY(10px); transition: all 0.3s; z-index: 9999;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast-success { background: #16a34a; }
+        .toast-error { background: #dc2626; }
+        code { color: #94a3b8; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1><span>&#9679;</span> Local Discovery Registry</h1>
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-value" id="statServices">0</div>
+            <div class="stat-label">服务</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value" id="statInstances">0</div>
+            <div class="stat-label">实例</div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <!-- 服务实例列表 -->
+    <div class="card">
+        <div class="card-header">
+            <h2>已注册服务</h2>
+            <span style="font-size:12px;color:#64748b">每 2 秒刷新</span>
+        </div>
+        <div class="card-body" style="padding:0">
+            <table>
+                <thead>
+                    <tr>
+                        <th>服务名</th>
+                        <th>地址</th>
+                        <th>状态</th>
+                        <th>心跳</th>
+                        <th style="text-align:right">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="instanceTable"></tbody>
+            </table>
+            <div id="emptyState" class="empty">
+                暂无服务注册<br>
+                <code style="margin-top:8px;display:inline-block">
+                    在服务启动参数加 -javaagent:local-discovery-agent.jar 即可自动注册
+                </code>
+            </div>
+        </div>
+    </div>
+
+    <!-- 手动注册 -->
+    <div class="card">
+        <div class="card-header">
+            <h2>手动注册</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <input type="text" id="regServiceId" placeholder="服务名" />
+                <input type="text" id="regHost" placeholder="主机，默认 localhost" value="localhost" />
+                <input type="number" id="regPort" placeholder="端口" />
+                <button class="btn btn-primary" onclick="manualRegister()">注册</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    const API = '';
+
+    async function loadAll() {
+        try {
+            const res = await fetch(API + '/api/all');
+            const data = await res.json();
+
+            document.getElementById('statServices').textContent = data.totalServices;
+            document.getElementById('statInstances').textContent = data.totalInstances;
+
+            const tbody = document.getElementById('instanceTable');
+            const empty = document.getElementById('emptyState');
+
+            if (data.instances.length === 0) {
+                tbody.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+            empty.style.display = 'none';
+
+            const now = Date.now();
+            tbody.innerHTML = data.instances.map(inst => {
+                const ago = Math.floor((now - inst.lastHeartbeat) / 1000);
+                const ratio = Math.max(0, Math.min(100, (15 - ago) / 15 * 100));
+                const barColor = ratio > 60 ? '#22c55e' : ratio > 30 ? '#eab308' : '#ef4444';
+                const statusTag = inst.expired
+                    ? '<span class="tag tag-down">已过期</span>'
+                    : inst.enabled
+                        ? '<span class="tag tag-up">在线</span>'
+                        : '<span class="tag tag-disabled">已停用</span>';
+
+                return `<tr>
+                    <td><strong>${esc(inst.serviceId)}</strong></td>
+                    <td><code>${esc(inst.uri)}</code></td>
+                    <td>${statusTag}</td>
+                    <td>
+                        ${ago}秒前
+                        <div class="heartbeat-bar">
+                            <div class="heartbeat-fill" style="width:${ratio}%;background:${barColor}"></div>
+                        </div>
+                    </td>
+                    <td style="text-align:right">
+                        <div class="btn-group" style="justify-content:flex-end">
+                            <button class="btn btn-sm ${inst.enabled ? 'btn-warning' : 'btn-success'}"
+                                onclick="toggle('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port},${!inst.enabled})">
+                                ${inst.enabled ? '停用' : '启用'}
+                            </button>
+                            <button class="btn btn-sm btn-danger"
+                                onclick="deregister('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port})">
+                                注销
+                            </button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            // 注册中心可能还没启动完
+        }
+    }
+
+    async function manualRegister() {
+        const serviceId = document.getElementById('regServiceId').value.trim();
+        const host = document.getElementById('regHost').value.trim() || 'localhost';
+        const port = document.getElementById('regPort').value.trim();
+        if (!serviceId || !port) { showToast('请填写服务名和端口', 'error'); return; }
+
+        const res = await fetch(API + '/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `serviceId=${enc(serviceId)}&host=${enc(host)}&port=${enc(port)}`
+        });
+        if (res.ok) {
+            document.getElementById('regServiceId').value = '';
+            document.getElementById('regPort').value = '';
+            showToast(`已注册: ${serviceId} -> ${host}:${port}`, 'success');
+            loadAll();
+        }
+    }
+
+    async function deregister(serviceId, host, port) {
+        await fetch(API + '/api/deregister', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `serviceId=${enc(serviceId)}&host=${enc(host)}&port=${port}`
+        });
+        showToast(`已注销: ${serviceId}`, 'success');
+        loadAll();
+    }
+
+    async function toggle(serviceId, host, port, enabled) {
+        await fetch(API + '/api/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `serviceId=${enc(serviceId)}&host=${enc(host)}&port=${port}&enabled=${enabled}`
+        });
+        showToast(`${serviceId} 已${enabled ? '启用' : '停用'}`, 'success');
+        loadAll();
+    }
+
+    function showToast(msg, type) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = `toast toast-${type} show`;
+        setTimeout(() => { t.className = 'toast'; }, 2500);
+    }
+    function esc(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+    function enc(s) { return encodeURIComponent(s); }
+
+    loadAll();
+    setInterval(loadAll, 2000);
+</script>
+</body>
+</html>
