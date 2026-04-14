@@ -13,10 +13,10 @@ import java.lang.instrument.Instrumentation;
  * 默认注册中心地址: http://localhost:9527
  *
  * 启动后自动完成:
- * 1. 拦截 SpringApplication.run() 获取服务名和端口
- * 2. 自动注册到本地注册中心 + 心跳
- * 3. 拦截 DiscoveryClient.getInstances() → 先查注册中心，没有则穿透 Nacos
- * 4. 拦截 TomcatWebServer.start() → 端口管理
+ * 1. 拦截 SpringApplication.run() → Spring 启动完成后提取应用信息并自动注册
+ * 2. 拦截 TomcatWebServer.start() → 端口管理
+ * 3. 拦截 BlockingLoadBalancerClient.choose() → Feign/RestTemplate 本地优先
+ * 4. 拦截 RoundRobinLoadBalancer.choose() → Gateway/WebClient 响应式路径本地优先
  */
 public class AgentMain {
 
@@ -35,7 +35,7 @@ public class AgentMain {
         registryClient = new RegistryClient(registryUrl);
         registrar = new AgentRegistrar(registryClient);
 
-        // 设置桥接器：DiscoveryClient 拦截 → 查注册中心
+        // 设置桥接器：查注册中心
         DiscoveryBridge.instanceLookup = serviceId -> registryClient.getInstances(serviceId);
 
         // 设置桥接器：Tomcat 启动完成 → 注册 PortManager
@@ -43,8 +43,9 @@ public class AgentMain {
             PortManager.getInstance().registerTomcat(tomcatWebServer);
         };
 
-        // 设置桥接器：Spring 应用就绪 → 自动注册到注册中心
+        // 设置桥接器：Spring 应用就绪 → 自动注册
         EnvironmentBridge.onApplicationReady = info -> {
+            // info = {appName, port, applicationContext 对象的类名（仅用于日志）}
             String appName = info[0];
             int port = Integer.parseInt(info[1]);
             System.out.println("[LocalDiscovery] 检测到应用: " + appName + ", 端口: " + port);
@@ -53,44 +54,67 @@ public class AgentMain {
 
         // ====== ByteBuddy 拦截 ======
 
-        // 1. 拦截 SpringApplication.run() → 获取应用名和端口
+        AgentBuilder.Listener safeListener = new AgentBuilder.Listener.Adapter() {
+            @Override
+            public void onError(String typeName, ClassLoader classLoader,
+                                net.bytebuddy.utility.JavaModule module, boolean loaded, Throwable throwable) {
+                System.err.println("[LocalDiscovery] 拦截失败: " + typeName + " -> " + throwable.getMessage());
+                throwable.printStackTrace();
+            }
+        };
+
+        // 1. 拦截 SpringApplication.run() → Spring 启动完成后提取应用信息并自动注册
         new AgentBuilder.Default()
-                .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
+                .with(safeListener)
                 .ignore(ElementMatchers.nameStartsWith("com.localdiscovery"))
                 .type(ElementMatchers.named("org.springframework.boot.SpringApplication"))
                 .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
                         builder.visit(Advice.to(SpringApplicationInterceptor.class)
                                 .on(ElementMatchers.named("run")
-                                        .and(ElementMatchers.takesArguments(String[].class))
-                                        .and(ElementMatchers.isStatic().or(ElementMatchers.not(ElementMatchers.isStatic())))))
+                                        .and(ElementMatchers.takesArguments(String[].class))))
                 )
                 .installOn(inst);
 
-        // 2. 拦截 DiscoveryClient.getInstances() → 查注册中心
+        // 2. 拦截 TomcatWebServer.start() → 端口管理
         new AgentBuilder.Default()
-                .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
-                .ignore(ElementMatchers.nameStartsWith("com.localdiscovery"))
-                .type(ElementMatchers.hasSuperType(
-                                ElementMatchers.named("org.springframework.cloud.client.discovery.DiscoveryClient"))
-                        .and(ElementMatchers.not(ElementMatchers.nameStartsWith("com.localdiscovery")))
-                        .and(ElementMatchers.not(ElementMatchers.isInterface()))
-                )
-                .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
-                        builder.visit(Advice.to(DiscoveryClientInterceptor.class)
-                                .on(ElementMatchers.named("getInstances")
-                                        .and(ElementMatchers.takesArguments(1))
-                                        .and(ElementMatchers.takesArgument(0, String.class))))
-                )
-                .installOn(inst);
-
-        // 3. 拦截 TomcatWebServer.start() → 端口管理
-        new AgentBuilder.Default()
-                .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
+                .with(safeListener)
                 .type(ElementMatchers.named("org.springframework.boot.web.embedded.tomcat.TomcatWebServer"))
                 .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
                         builder.visit(Advice.to(TomcatInterceptor.class)
                                 .on(ElementMatchers.named("start")
                                         .and(ElementMatchers.takesArguments(0))))
+                )
+                .installOn(inst);
+
+        // 3. 拦截 BlockingLoadBalancerClient.choose() → Feign/RestTemplate 本地优先
+        new AgentBuilder.Default()
+                .with(safeListener)
+                .type(ElementMatchers.named("org.springframework.cloud.loadbalancer.blocking.client.BlockingLoadBalancerClient"))
+                .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
+                        builder.visit(Advice.to(LoadBalancerInterceptor.class)
+                                .on(ElementMatchers.named("choose")
+                                        .and(ElementMatchers.takesArguments(2))
+                                        .and(ElementMatchers.takesArgument(0, String.class))))
+                )
+                .installOn(inst);
+
+        // 4. 拦截 RoundRobinLoadBalancer.choose() → Gateway/WebClient 响应式路径本地优先
+        // 自适应：类不存在时 safeListener 静默处理，不影响阻塞式路径
+        new AgentBuilder.Default()
+                .with(safeListener)
+                .type(ElementMatchers.named("org.springframework.cloud.loadbalancer.core.RoundRobinLoadBalancer"))
+                .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
+                        builder.visit(Advice.to(ReactiveLoadBalancerInterceptor.class)
+                                .on(ElementMatchers.named("choose")))
+                )
+                .installOn(inst);
+
+        new AgentBuilder.Default()
+                .with(safeListener)
+                .type(ElementMatchers.named("org.springframework.cloud.loadbalancer.core.RandomLoadBalancer"))
+                .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
+                        builder.visit(Advice.to(ReactiveLoadBalancerInterceptor.class)
+                                .on(ElementMatchers.named("choose")))
                 )
                 .installOn(inst);
 

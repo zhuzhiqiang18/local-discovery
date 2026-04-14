@@ -12,8 +12,14 @@ public class DiscoveryClientInterceptor {
 
     @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
     public static Object onEnter(@Advice.Argument(0) String serviceId) {
+        // Nacos 可能传入带 group 前缀的 serviceId，如 "CLOUD_GROUP@@service-a"
+        String lookupId = serviceId;
+        if (lookupId != null && lookupId.contains("@@")) {
+            lookupId = lookupId.substring(lookupId.indexOf("@@") + 2);
+        }
+        System.out.println("[LocalDiscovery] getInstances 被调用: " + serviceId + " -> 查询: " + lookupId);
         try {
-            List<String[]> instances = DiscoveryBridge.lookup(serviceId);
+            List<String[]> instances = DiscoveryBridge.lookup(lookupId);
             if (instances != null && !instances.isEmpty()) {
                 // 通过反射创建 DefaultServiceInstance 列表
                 Class<?> dsiClass = Class.forName("org.springframework.cloud.client.DefaultServiceInstance");
