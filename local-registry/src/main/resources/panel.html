@@ -116,6 +116,7 @@
                         <th>服务名</th>
                         <th>地址</th>
                         <th>状态</th>
+                        <th>MQ</th>
                         <th>心跳</th>
                         <th style="text-align:right">操作</th>
                     </tr>
@@ -180,11 +181,15 @@
                     : inst.enabled
                         ? '<span class="tag tag-up">在线</span>'
                         : '<span class="tag tag-disabled">已停用</span>';
+                const mqTag = inst.mqEnabled
+                    ? '<span class="tag tag-up">消费中</span>'
+                    : '<span class="tag tag-disabled">已暂停</span>';
 
                 return `<tr>
                     <td><strong>${esc(inst.serviceId)}</strong></td>
                     <td><code>${esc(inst.uri)}</code></td>
                     <td>${statusTag}</td>
+                    <td>${mqTag}</td>
                     <td>
                         ${ago}秒前
                         <div class="heartbeat-bar">
@@ -193,6 +198,10 @@
                     </td>
                     <td style="text-align:right">
                         <div class="btn-group" style="justify-content:flex-end">
+                            <button class="btn btn-sm ${inst.mqEnabled ? 'btn-warning' : 'btn-success'}"
+                                onclick="toggleMq('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port},${!inst.mqEnabled})">
+                                ${inst.mqEnabled ? 'MQ停用' : 'MQ启用'}
+                            </button>
                             <button class="btn btn-sm ${inst.enabled ? 'btn-warning' : 'btn-success'}"
                                 onclick="toggle('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port},${!inst.enabled})">
                                 ${inst.enabled ? '停用' : '启用'}
@@ -246,6 +255,16 @@
             body: `serviceId=${enc(serviceId)}&host=${enc(host)}&port=${port}&enabled=${enabled}`
         });
         showToast(`${serviceId} 已${enabled ? '启用' : '停用'}`, 'success');
+        loadAll();
+    }
+
+    async function toggleMq(serviceId, host, port, mqEnabled) {
+        await fetch(API + '/api/toggleMq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `serviceId=${enc(serviceId)}&host=${enc(host)}&port=${port}&mqEnabled=${mqEnabled}`
+        });
+        showToast(`${serviceId} MQ 已${mqEnabled ? '启用' : '暂停'}`, 'success');
         loadAll();
     }
 

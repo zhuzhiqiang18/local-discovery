@@ -97,6 +97,10 @@ public class RegistryServer {
                         if (method == HttpMethod.POST) handleToggle(ctx, request);
                         else sendJson(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "{\"error\":\"POST only\"}");
                     }
+                    case "/api/toggleMq" -> {
+                        if (method == HttpMethod.POST) handleToggleMq(ctx, request);
+                        else sendJson(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "{\"error\":\"POST only\"}");
+                    }
 
                     default -> sendJson(ctx, HttpResponseStatus.NOT_FOUND, "{\"error\":\"not found\"}");
                 }
@@ -152,8 +156,12 @@ public class RegistryServer {
                 sendJson(ctx, HttpResponseStatus.BAD_REQUEST, "{\"error\":\"缺少 serviceId/host/port\"}");
                 return;
             }
-            boolean ok = Registry.getInstance().heartbeat(serviceId, host, Integer.parseInt(portStr));
-            sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + "}");
+            int port = Integer.parseInt(portStr);
+            boolean ok = Registry.getInstance().heartbeat(serviceId, host, port);
+            // 心跳响应带回 mqEnabled 状态，让 Agent 感知变化
+            Boolean mqEnabled = Registry.getInstance().isMqEnabled(serviceId, host, port);
+            String mqField = mqEnabled != null ? ",\"mqEnabled\":" + mqEnabled : "";
+            sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + mqField + "}");
         }
 
         // ====== 查询某服务的实例 ======
@@ -199,6 +207,22 @@ public class RegistryServer {
             sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + "}");
         }
 
+        // ====== 启用/停用 MQ 消费 ======
+        private void handleToggleMq(ChannelHandlerContext ctx, FullHttpRequest request) {
+            Map<String, String> params = parseBody(request);
+            String serviceId = params.get("serviceId");
+            String host = params.get("host");
+            String portStr = params.get("port");
+            String mqEnabledStr = params.get("mqEnabled");
+            if (serviceId == null || host == null || portStr == null) {
+                sendJson(ctx, HttpResponseStatus.BAD_REQUEST, "{\"error\":\"缺少参数\"}");
+                return;
+            }
+            boolean mqEnabled = "true".equals(mqEnabledStr);
+            boolean ok = Registry.getInstance().toggleMq(serviceId, host, Integer.parseInt(portStr), mqEnabled);
+            sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + "}");
+        }
+
         // ====== 工具方法 ======
 
         private String instancesToJson(List<Registry.ServiceInstance> instances) {
@@ -213,6 +237,7 @@ public class RegistryServer {
                         .append(",\"instanceId\":\"").append(inst.getInstanceId())
                         .append("\",\"uri\":\"").append(inst.getUri())
                         .append("\",\"enabled\":").append(inst.isEnabled())
+                        .append(",\"mqEnabled\":").append(inst.isMqEnabled())
                         .append(",\"lastHeartbeat\":").append(inst.getLastHeartbeat())
                         .append(",\"expired\":").append(inst.isExpired())
                         .append("}");

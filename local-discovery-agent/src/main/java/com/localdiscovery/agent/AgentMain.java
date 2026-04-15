@@ -118,6 +118,17 @@ public class AgentMain {
                 )
                 .installOn(inst);
 
+        // 6. 拦截 DefaultRocketMQListenerContainer.start() → 捕获 container 引用，用于 MQ 消费控制
+        new AgentBuilder.Default()
+                .with(safeListener)
+                .type(ElementMatchers.named("org.apache.rocketmq.spring.support.DefaultRocketMQListenerContainer"))
+                .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
+                        builder.visit(Advice.to(RocketMqInterceptor.class)
+                                .on(ElementMatchers.named("start")
+                                        .and(ElementMatchers.takesArguments(0))))
+                )
+                .installOn(inst);
+
         System.out.println("[LocalDiscovery] Agent 初始化完成");
         System.out.println("[LocalDiscovery] 注册中心: " + registryUrl);
     }

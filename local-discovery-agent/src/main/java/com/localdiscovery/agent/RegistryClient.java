@@ -39,11 +39,12 @@ public class RegistryClient {
     }
 
     /**
-     * 心跳
+     * 心跳，返回注册中心下发的 mqEnabled 状态
+     * null 表示心跳失败，true/false 表示 MQ 启用/停用
      */
-    public boolean heartbeat(String serviceId, String host, int port) {
+    public Boolean heartbeat(String serviceId, String host, int port) {
         String body = "serviceId=" + encode(serviceId) + "&host=" + encode(host) + "&port=" + port;
-        return post("/api/heartbeat", body);
+        return postWithMqStatus("/api/heartbeat", body);
     }
 
     /**
@@ -93,6 +94,41 @@ public class RegistryClient {
             return conn.getResponseCode() == 200;
         } catch (IOException e) {
             return false;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    /**
+     * POST 并解析响应中的 mqEnabled 字段
+     * 返回 null 表示请求失败
+     */
+    private Boolean postWithMqStatus(String path, String body) {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) URI.create(registryUrl + path).toURL().openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(2000);
+            conn.setReadTimeout(2000);
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.getBytes(StandardCharsets.UTF_8));
+            }
+            if (conn.getResponseCode() == 200) {
+                try (InputStream is = conn.getInputStream()) {
+                    String response = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                    // 解析 {"success":true,"mqEnabled":false}
+                    if (response.contains("\"mqEnabled\":false")) {
+                        return Boolean.FALSE;
+                    }
+                    return Boolean.TRUE;
+                }
+            }
+            return null;
+        } catch (IOException e) {
+            return null;
         } finally {
             if (conn != null) conn.disconnect();
         }

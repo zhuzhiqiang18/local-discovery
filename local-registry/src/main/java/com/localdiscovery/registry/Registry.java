@@ -25,6 +25,7 @@ public class Registry {
         private final long registerTime;
         private volatile long lastHeartbeat;
         private volatile boolean enabled;
+        private volatile boolean mqEnabled;
         private final Map<String, String> metadata;
 
         public ServiceInstance(String serviceId, String host, int port, Map<String, String> metadata) {
@@ -35,6 +36,7 @@ public class Registry {
             this.registerTime = System.currentTimeMillis();
             this.lastHeartbeat = this.registerTime;
             this.enabled = true;
+            this.mqEnabled = true;
             this.metadata = metadata != null ? new HashMap<>(metadata) : new HashMap<>();
         }
 
@@ -46,6 +48,8 @@ public class Registry {
         public long getLastHeartbeat() { return lastHeartbeat; }
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public boolean isMqEnabled() { return mqEnabled; }
+        public void setMqEnabled(boolean mqEnabled) { this.mqEnabled = mqEnabled; }
         public Map<String, String> getMetadata() { return metadata; }
         public String getUri() { return "http://" + host + ":" + port; }
 
@@ -180,6 +184,38 @@ public class Registry {
             }
         }
         return false;
+    }
+
+    /**
+     * 启用/停用某个实例的 MQ 消费
+     */
+    public boolean toggleMq(String serviceId, String host, int port, boolean mqEnabled) {
+        String instanceId = serviceId + "-" + host + "-" + port;
+        ConcurrentHashMap<String, ServiceInstance> instances = registry.get(serviceId);
+        if (instances != null) {
+            ServiceInstance instance = instances.get(instanceId);
+            if (instance != null) {
+                instance.setMqEnabled(mqEnabled);
+                System.out.println("[Registry] " + instanceId + " MQ -> " + (mqEnabled ? "启用" : "停用"));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 查询实例的 MQ 是否启用
+     */
+    public Boolean isMqEnabled(String serviceId, String host, int port) {
+        String instanceId = serviceId + "-" + host + "-" + port;
+        ConcurrentHashMap<String, ServiceInstance> instances = registry.get(serviceId);
+        if (instances != null) {
+            ServiceInstance instance = instances.get(instanceId);
+            if (instance != null) {
+                return instance.isMqEnabled();
+            }
+        }
+        return null;
     }
 
     public int totalInstances() {
