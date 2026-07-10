@@ -15,6 +15,19 @@ import java.util.*;
  */
 public class RegistryClient {
 
+    /** 心跳响应：包含注册中心下发的运行时配置 */
+    public static class HeartbeatResult {
+        public final boolean mqEnabled;
+        public final boolean onlineProxyEnabled;
+        public final String gatewayUrl;
+
+        public HeartbeatResult(boolean mqEnabled, boolean onlineProxyEnabled, String gatewayUrl) {
+            this.mqEnabled = mqEnabled;
+            this.onlineProxyEnabled = onlineProxyEnabled;
+            this.gatewayUrl = gatewayUrl;
+        }
+    }
+
     private final String registryUrl;
 
     public RegistryClient(String registryUrl) {
@@ -39,12 +52,12 @@ public class RegistryClient {
     }
 
     /**
-     * 心跳，返回注册中心下发的 mqEnabled 状态
-     * null 表示心跳失败，true/false 表示 MQ 启用/停用
+     * 心跳，返回注册中心下发的运行时配置
+     * null 表示心跳失败
      */
-    public Boolean heartbeat(String serviceId, String host, int port) {
+    public HeartbeatResult heartbeat(String serviceId, String host, int port) {
         String body = "serviceId=" + encode(serviceId) + "&host=" + encode(host) + "&port=" + port;
-        return postWithMqStatus("/api/heartbeat", body);
+        return postHeartbeat("/api/heartbeat", body);
     }
 
     /**
@@ -100,10 +113,10 @@ public class RegistryClient {
     }
 
     /**
-     * POST 并解析响应中的 mqEnabled 字段
+     * POST 心跳并解析响应中的运行时配置
      * 返回 null 表示请求失败
      */
-    private Boolean postWithMqStatus(String path, String body) {
+    private HeartbeatResult postHeartbeat(String path, String body) {
         HttpURLConnection conn = null;
         try {
             conn = (HttpURLConnection) URI.create(registryUrl + path).toURL().openConnection();
@@ -119,11 +132,10 @@ public class RegistryClient {
             if (conn.getResponseCode() == 200) {
                 try (InputStream is = conn.getInputStream()) {
                     String response = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                    // 解析 {"success":true,"mqEnabled":false}
-                    if (response.contains("\"mqEnabled\":false")) {
-                        return Boolean.FALSE;
-                    }
-                    return Boolean.TRUE;
+                    boolean mqEnabled = !response.contains("\"mqEnabled\":false");
+                    boolean proxyEnabled = response.contains("\"onlineProxyEnabled\":true");
+                    String gatewayUrl = extractJsonString(response, "gatewayUrl");
+                    return new HeartbeatResult(mqEnabled, proxyEnabled, gatewayUrl);
                 }
             }
             return null;
@@ -132,6 +144,16 @@ public class RegistryClient {
         } finally {
             if (conn != null) conn.disconnect();
         }
+    }
+
+    private static String extractJsonString(String json, String key) {
+        String needle = "\"" + key + "\":\"";
+        int i = json.indexOf(needle);
+        if (i < 0) return "";
+        int start = i + needle.length();
+        int end = json.indexOf('"', start);
+        if (end < 0) return "";
+        return json.substring(start, end);
     }
 
     private String get(String path) {

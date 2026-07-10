@@ -65,6 +65,12 @@ public class Registry {
     /** serviceId -> (instanceId -> ServiceInstance) */
     private final ConcurrentHashMap<String, ConcurrentHashMap<String, ServiceInstance>> registry = new ConcurrentHashMap<>();
 
+    /** 全局网关代理开关：开启后 Agent 找不到本地实例时会走 gatewayUrl */
+    private volatile boolean onlineProxyEnabled = false;
+
+    /** 网关地址（含协议），如 https://api.prod.com */
+    private volatile String gatewayUrl = "";
+
     private Registry() {}
 
     public static Registry getInstance() {
@@ -224,5 +230,29 @@ public class Registry {
 
     public int totalServices() {
         return registry.size();
+    }
+
+    public boolean isOnlineProxyEnabled() {
+        return onlineProxyEnabled;
+    }
+
+    public String getGatewayUrl() {
+        return gatewayUrl;
+    }
+
+    /**
+     * 更新网关代理配置
+     * 开启代理时联动关闭所有实例的 MQ 消费
+     */
+    public void updateOnlineProxy(boolean enabled, String gatewayUrl) {
+        this.onlineProxyEnabled = enabled;
+        if (gatewayUrl != null) {
+            this.gatewayUrl = gatewayUrl.trim();
+        }
+        System.out.println("[Registry] 网关代理 -> " + (enabled ? "开启" : "关闭") + ", gatewayUrl=" + this.gatewayUrl);
+        if (enabled) {
+            registry.values().forEach(map -> map.values().forEach(i -> i.setMqEnabled(false)));
+            System.out.println("[Registry] 已联动关闭所有实例的 MQ 消费");
+        }
     }
 }

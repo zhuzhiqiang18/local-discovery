@@ -101,6 +101,11 @@ public class RegistryServer {
                         if (method == HttpMethod.POST) handleToggleMq(ctx, request);
                         else sendJson(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "{\"error\":\"POST only\"}");
                     }
+                    case "/api/onlineProxy" -> {
+                        if (method == HttpMethod.GET) handleGetOnlineProxy(ctx);
+                        else if (method == HttpMethod.POST) handleUpdateOnlineProxy(ctx, request);
+                        else sendJson(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "{\"error\":\"GET/POST only\"}");
+                    }
 
                     default -> sendJson(ctx, HttpResponseStatus.NOT_FOUND, "{\"error\":\"not found\"}");
                 }
@@ -158,10 +163,12 @@ public class RegistryServer {
             }
             int port = Integer.parseInt(portStr);
             boolean ok = Registry.getInstance().heartbeat(serviceId, host, port);
-            // 心跳响应带回 mqEnabled 状态，让 Agent 感知变化
+            // 心跳响应带回 mqEnabled + 网关代理配置，让 Agent 感知变化
             Boolean mqEnabled = Registry.getInstance().isMqEnabled(serviceId, host, port);
             String mqField = mqEnabled != null ? ",\"mqEnabled\":" + mqEnabled : "";
-            sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + mqField + "}");
+            String proxyField = ",\"onlineProxyEnabled\":" + Registry.getInstance().isOnlineProxyEnabled()
+                    + ",\"gatewayUrl\":\"" + escapeJson(Registry.getInstance().getGatewayUrl()) + "\"";
+            sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + mqField + proxyField + "}");
         }
 
         // ====== 查询某服务的实例 ======
@@ -221,6 +228,25 @@ public class RegistryServer {
             boolean mqEnabled = "true".equals(mqEnabledStr);
             boolean ok = Registry.getInstance().toggleMq(serviceId, host, Integer.parseInt(portStr), mqEnabled);
             sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + "}");
+        }
+
+        // ====== 查询网关代理配置 ======
+        private void handleGetOnlineProxy(ChannelHandlerContext ctx) {
+            sendJson(ctx, HttpResponseStatus.OK,
+                    "{\"enabled\":" + Registry.getInstance().isOnlineProxyEnabled()
+                            + ",\"gatewayUrl\":\"" + escapeJson(Registry.getInstance().getGatewayUrl()) + "\"}");
+        }
+
+        // ====== 更新网关代理配置 ======
+        private void handleUpdateOnlineProxy(ChannelHandlerContext ctx, FullHttpRequest request) {
+            Map<String, String> params = parseBody(request);
+            String enabledStr = params.get("enabled");
+            String gatewayUrl = params.get("gatewayUrl");
+            boolean enabled = "true".equals(enabledStr);
+            Registry.getInstance().updateOnlineProxy(enabled, gatewayUrl);
+            sendJson(ctx, HttpResponseStatus.OK,
+                    "{\"success\":true,\"enabled\":" + Registry.getInstance().isOnlineProxyEnabled()
+                            + ",\"gatewayUrl\":\"" + escapeJson(Registry.getInstance().getGatewayUrl()) + "\"}");
         }
 
         // ====== 工具方法 ======

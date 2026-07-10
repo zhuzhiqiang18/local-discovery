@@ -129,6 +129,22 @@ public class AgentMain {
                 )
                 .installOn(inst);
 
+        // 7. 拦截 feign.Client.execute() → 走网关的请求注入 Authorization
+        // 只匹配 feign.* 包下的具体 Client 实现，避开 Spring 的包装类（RetryableFeignBlockingLoadBalancerClient 等）
+        // 这些包装类会引入 spring-retry 等可选依赖，若 classpath 里没有会导致 TypePool 解析失败
+        new AgentBuilder.Default()
+                .with(safeListener)
+                .type(ElementMatchers.nameStartsWith("feign.")
+                        .and(ElementMatchers.hasSuperType(ElementMatchers.named("feign.Client")))
+                        .and(ElementMatchers.not(ElementMatchers.isInterface()))
+                        .and(ElementMatchers.not(ElementMatchers.isAbstract())))
+                .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
+                        builder.visit(Advice.to(FeignClientInterceptor.class)
+                                .on(ElementMatchers.named("execute")
+                                        .and(ElementMatchers.takesArguments(2))))
+                )
+                .installOn(inst);
+
         System.out.println("[LocalDiscovery] Agent 初始化完成");
         System.out.println("[LocalDiscovery] 注册中心: " + registryUrl);
     }

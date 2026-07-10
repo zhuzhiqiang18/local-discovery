@@ -52,15 +52,16 @@ public class AgentRegistrar {
     private void startHeartbeat() {
         scheduler.scheduleAtFixedRate(() -> {
             if (serviceId != null && registered) {
-                Boolean mqEnabled = client.heartbeat(serviceId, host, port);
-                if (mqEnabled == null) {
+                RegistryClient.HeartbeatResult result = client.heartbeat(serviceId, host, port);
+                if (result == null) {
                     System.err.println("[LocalDiscovery] 心跳失败，尝试重新注册...");
                     registered = false;
                     client.register(serviceId, host, port);
                     registered = true;
                 } else {
-                    // 根据注册中心下发的 mqEnabled 状态控制本地 MQ 消费
-                    MqBridge.setMqEnabled(mqEnabled);
+                    // 根据注册中心下发的状态控制本地 MQ 消费 & 网关代理
+                    MqBridge.setMqEnabled(result.mqEnabled);
+                    OnlineProxyBridge.update(result.onlineProxyEnabled, result.gatewayUrl);
                 }
             }
         }, 5, 5, TimeUnit.SECONDS);

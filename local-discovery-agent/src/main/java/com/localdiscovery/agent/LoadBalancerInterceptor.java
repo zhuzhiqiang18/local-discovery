@@ -38,6 +38,27 @@ public class LoadBalancerInterceptor {
                 System.out.println("[LocalDiscovery] " + serviceId + " → 本地 " + host + ":" + port);
                 return localInstance;
             }
+
+            // 本地没有 → 检查网关代理开关 + Authorization
+            if (OnlineProxyBridge.isEnabled()) {
+                String auth = OnlineProxyBridge.currentAuthorization();
+                if (auth == null || auth.isEmpty()) {
+                    // 当前线程没有 Authorization → 忽略网关，放行走原逻辑
+                    return null;
+                }
+                Class<?> dsiClass = Class.forName("org.springframework.cloud.client.DefaultServiceInstance");
+                var constructor = dsiClass.getConstructor(
+                        String.class, String.class, String.class, int.class, boolean.class);
+                Object gatewayInstance = constructor.newInstance(
+                        lookupId + "-gateway",
+                        lookupId,
+                        OnlineProxyBridge.getGatewayHost(),
+                        OnlineProxyBridge.getGatewayPort(),
+                        OnlineProxyBridge.isGatewaySecure());
+                System.out.println("[LocalDiscovery] " + serviceId + " → 网关 "
+                        + OnlineProxyBridge.getGatewayHost() + ":" + OnlineProxyBridge.getGatewayPort());
+                return gatewayInstance;
+            }
         } catch (Exception e) {
             System.err.println("[LocalDiscovery] LoadBalancer 拦截异常: " + e.getMessage());
         }

@@ -22,30 +22,48 @@ public class ReactiveLoadBalancerInterceptor {
         }
         try {
             List<String[]> instances = DiscoveryBridge.lookup(lookupId);
+            String targetHost = null;
+            int targetPort = 0;
+            boolean targetSecure = false;
+            boolean isGateway = false;
+
             if (instances != null && !instances.isEmpty()) {
                 String[] inst = instances.get(0);
-                String host = inst[0];
-                int port = Integer.parseInt(inst[1]);
-                boolean secure = Boolean.parseBoolean(inst[2]);
-
-                // 反射创建 DefaultServiceInstance
-                Class<?> siClass = Class.forName("org.springframework.cloud.client.ServiceInstance");
-                Class<?> dsiClass = Class.forName("org.springframework.cloud.client.DefaultServiceInstance");
-                Object localInstance = dsiClass.getConstructor(
-                        String.class, String.class, String.class, int.class, boolean.class
-                ).newInstance(lookupId + "-local-0", lookupId, host, port, secure);
-
-                // 反射创建 DefaultResponse(ServiceInstance)
-                Class<?> responseClass = Class.forName("org.springframework.cloud.client.loadbalancer.DefaultResponse");
-                Object response = responseClass.getConstructor(siClass).newInstance(localInstance);
-
-                // 反射调用 Mono.just(response)
-                Class<?> monoClass = Class.forName("reactor.core.publisher.Mono");
-                Object mono = monoClass.getMethod("just", Object.class).invoke(null, response);
-
-                System.out.println("[LocalDiscovery] (reactive) " + serviceId + " → 本地 " + host + ":" + port);
-                return mono;
+                targetHost = inst[0];
+                targetPort = Integer.parseInt(inst[1]);
+                targetSecure = Boolean.parseBoolean(inst[2]);
+            } else if (OnlineProxyBridge.isEnabled()) {
+                String auth = OnlineProxyBridge.currentAuthorization();
+                if (auth == null || auth.isEmpty()) {
+                    return null;
+                }
+                targetHost = OnlineProxyBridge.getGatewayHost();
+                targetPort = OnlineProxyBridge.getGatewayPort();
+                targetSecure = OnlineProxyBridge.isGatewaySecure();
+                isGateway = true;
             }
+
+            if (targetHost == null) return null;
+
+            // 反射创建 DefaultServiceInstance
+            Class<?> siClass = Class.forName("org.springframework.cloud.client.ServiceInstance");
+            Class<?> dsiClass = Class.forName("org.springframework.cloud.client.DefaultServiceInstance");
+            Object localInstance = dsiClass.getConstructor(
+                    String.class, String.class, String.class, int.class, boolean.class
+            ).newInstance(lookupId + (isGateway ? "-gateway" : "-local-0"),
+                    lookupId, targetHost, targetPort, targetSecure);
+
+            // 反射创建 DefaultResponse(ServiceInstance)
+            Class<?> responseClass = Class.forName("org.springframework.cloud.client.loadbalancer.DefaultResponse");
+            Object response = responseClass.getConstructor(siClass).newInstance(localInstance);
+
+            // 反射调用 Mono.just(response)
+            Class<?> monoClass = Class.forName("reactor.core.publisher.Mono");
+            Object mono = monoClass.getMethod("just", Object.class).invoke(null, response);
+
+            System.out.println("[LocalDiscovery] (reactive) " + serviceId + " → "
+                    + (isGateway ? "网关 " : "本地 ") + targetHost + ":" + targetPort);
+            return mono;
         } catch (Exception e) {
             System.err.println("[LocalDiscovery] ReactiveLoadBalancer 拦截异常: " + e.getMessage());
         }

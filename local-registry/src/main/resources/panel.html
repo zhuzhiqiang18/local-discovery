@@ -103,6 +103,24 @@
 </div>
 
 <div class="container">
+    <!-- 网关代理开关 -->
+    <div class="card">
+        <div class="card-header">
+            <h2>网关代理（本地找不到 → 走线上网关）</h2>
+            <span id="proxyStatus" style="font-size:12px;color:#64748b">关闭</span>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <input type="text" id="gatewayUrl" placeholder="网关地址，例如 https://api.prod.com" />
+                <button class="btn btn-success" onclick="updateProxy(true)">开启并保存</button>
+                <button class="btn btn-danger" onclick="updateProxy(false)">关闭</button>
+            </div>
+            <div style="font-size:12px;color:#64748b;padding:4px 2px 0">
+                开启后：本地未注册的服务调用 → 拼到网关地址上；仅当调用线程持有 Authorization 时才走网关，否则忽略。开启时会联动关闭所有实例的 MQ 消费。
+            </div>
+        </div>
+    </div>
+
     <!-- 服务实例列表 -->
     <div class="card">
         <div class="card-header">
@@ -268,6 +286,33 @@
         loadAll();
     }
 
+    async function loadProxy() {
+        try {
+            const res = await fetch(API + '/api/onlineProxy');
+            const data = await res.json();
+            const input = document.getElementById('gatewayUrl');
+            if (document.activeElement !== input) input.value = data.gatewayUrl || '';
+            document.getElementById('proxyStatus').textContent =
+                data.enabled ? '开启 → ' + (data.gatewayUrl || '(未配置网关)') : '关闭';
+            document.getElementById('proxyStatus').style.color = data.enabled ? '#4ade80' : '#64748b';
+        } catch (e) {}
+    }
+
+    async function updateProxy(enabled) {
+        const gatewayUrl = document.getElementById('gatewayUrl').value.trim();
+        if (enabled && !gatewayUrl) { showToast('请填写网关地址', 'error'); return; }
+        const res = await fetch(API + '/api/onlineProxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `enabled=${enabled}&gatewayUrl=${enc(gatewayUrl)}`
+        });
+        if (res.ok) {
+            showToast(enabled ? '网关代理已开启，MQ 消费已联动关闭' : '网关代理已关闭', 'success');
+            loadProxy();
+            loadAll();
+        }
+    }
+
     function showToast(msg, type) {
         const t = document.getElementById('toast');
         t.textContent = msg;
@@ -278,7 +323,9 @@
     function enc(s) { return encodeURIComponent(s); }
 
     loadAll();
+    loadProxy();
     setInterval(loadAll, 2000);
+    setInterval(loadProxy, 5000);
 </script>
 </body>
 </html>
