@@ -71,6 +71,36 @@ public class Registry {
     /** 网关地址（含协议），如 https://api.prod.com */
     private volatile String gatewayUrl = "";
 
+    // ============ Archery SQL 转发（全局配置） ============
+
+    /** Archery 全局总开关 */
+    private volatile boolean archeryEnabled = false;
+
+    /** Archery 平台地址，例如 http://archery.internal */
+    private volatile String archeryUrl = "";
+
+    /** Archery 请求头（JWT/Cookie），形如 "Authorization:JWT xxx;Cookie:sessionid=yyy" */
+    private volatile String archeryHeaders = "";
+
+    /** Archery 单次查询默认行数上限 */
+    private volatile int archeryLimit = 1000;
+
+    /** 每个 serviceId 对应的 Archery 项目配置：instance_name + db_name + 单服务开关 */
+    public static class ArcheryProject {
+        public volatile String instanceName = "";
+        public volatile String dbName = "";
+        public volatile boolean enabled = true;
+
+        public ArcheryProject() {}
+        public ArcheryProject(String instanceName, String dbName, boolean enabled) {
+            this.instanceName = instanceName == null ? "" : instanceName;
+            this.dbName = dbName == null ? "" : dbName;
+            this.enabled = enabled;
+        }
+    }
+
+    private final ConcurrentHashMap<String, ArcheryProject> archeryProjects = new ConcurrentHashMap<>();
+
     private Registry() {}
 
     public static Registry getInstance() {
@@ -254,5 +284,73 @@ public class Registry {
             registry.values().forEach(map -> map.values().forEach(i -> i.setMqEnabled(false)));
             System.out.println("[Registry] 已联动关闭所有实例的 MQ 消费");
         }
+        ConfigStore.save();
+    }
+
+    /** 启动时从配置文件回填，不打日志、不落盘 */
+    public void loadOnlineProxy(boolean enabled, String gatewayUrl) {
+        this.onlineProxyEnabled = enabled;
+        this.gatewayUrl = gatewayUrl == null ? "" : gatewayUrl.trim();
+    }
+
+    // ============ Archery 全局配置 ============
+
+    public boolean isArcheryEnabled() { return archeryEnabled; }
+    public String  getArcheryUrl()     { return archeryUrl; }
+    public String  getArcheryHeaders() { return archeryHeaders; }
+    public int     getArcheryLimit()   { return archeryLimit; }
+
+    public void updateArcheryGlobal(Boolean enabled, String url, String headers, Integer limit) {
+        if (enabled != null) this.archeryEnabled = enabled;
+        if (url != null)     this.archeryUrl = url.trim();
+        if (headers != null) this.archeryHeaders = headers;
+        if (limit != null && limit > 0) this.archeryLimit = limit;
+        System.out.println("[Registry] Archery 全局 -> enabled=" + this.archeryEnabled
+                + " url=" + this.archeryUrl + " limit=" + this.archeryLimit);
+        ConfigStore.save();
+    }
+
+    /** 启动时从配置文件回填，不打日志、不落盘 */
+    public void loadArcheryGlobal(boolean enabled, String url, String headers, int limit) {
+        this.archeryEnabled = enabled;
+        this.archeryUrl = url == null ? "" : url;
+        this.archeryHeaders = headers == null ? "" : headers;
+        if (limit > 0) this.archeryLimit = limit;
+    }
+
+    // ============ Archery 每服务项目配置 ============
+
+    public ArcheryProject getArcheryProject(String serviceId) {
+        return archeryProjects.get(serviceId);
+    }
+
+    public Map<String, ArcheryProject> getAllArcheryProjects() {
+        return Collections.unmodifiableMap(archeryProjects);
+    }
+
+    public void updateArcheryProject(String serviceId, String instanceName, String dbName, Boolean enabled) {
+        if (serviceId == null || serviceId.isBlank()) return;
+        archeryProjects.compute(serviceId, (k, existing) -> {
+            ArcheryProject p = existing != null ? existing : new ArcheryProject();
+            if (instanceName != null) p.instanceName = instanceName.trim();
+            if (dbName != null)       p.dbName = dbName.trim();
+            if (enabled != null)      p.enabled = enabled;
+            return p;
+        });
+        ArcheryProject p = archeryProjects.get(serviceId);
+        System.out.println("[Registry] Archery 项目 " + serviceId + " -> instance="
+                + p.instanceName + " db=" + p.dbName + " enabled=" + p.enabled);
+        ConfigStore.save();
+    }
+
+    public boolean removeArcheryProject(String serviceId) {
+        boolean removed = archeryProjects.remove(serviceId) != null;
+        if (removed) ConfigStore.save();
+        return removed;
+    }
+
+    /** 启动时回填用：不存在则创建，供 ConfigStore 逐字段写入 */
+    public ArcheryProject getOrCreateArcheryProject(String serviceId) {
+        return archeryProjects.computeIfAbsent(serviceId, k -> new ArcheryProject());
     }
 }

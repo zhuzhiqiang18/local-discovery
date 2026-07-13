@@ -107,6 +107,20 @@ public class RegistryServer {
                         else sendJson(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "{\"error\":\"GET/POST only\"}");
                     }
 
+                    // ====== Archery 全局配置 ======
+                    case "/api/archery" -> {
+                        if (method == HttpMethod.GET) handleGetArchery(ctx);
+                        else if (method == HttpMethod.POST) handleUpdateArchery(ctx, request);
+                        else sendJson(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "{\"error\":\"GET/POST only\"}");
+                    }
+                    // ====== Archery 每服务项目配置 ======
+                    case "/api/archeryProject" -> {
+                        if (method == HttpMethod.POST) handleUpdateArcheryProject(ctx, request);
+                        else if (method == HttpMethod.DELETE) handleDeleteArcheryProject(ctx, request);
+                        else sendJson(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, "{\"error\":\"POST/DELETE only\"}");
+                    }
+                    case "/api/archeryProjects" -> handleListArcheryProjects(ctx);
+
                     default -> sendJson(ctx, HttpResponseStatus.NOT_FOUND, "{\"error\":\"not found\"}");
                 }
             } catch (Exception e) {
@@ -168,7 +182,19 @@ public class RegistryServer {
             String mqField = mqEnabled != null ? ",\"mqEnabled\":" + mqEnabled : "";
             String proxyField = ",\"onlineProxyEnabled\":" + Registry.getInstance().isOnlineProxyEnabled()
                     + ",\"gatewayUrl\":\"" + escapeJson(Registry.getInstance().getGatewayUrl()) + "\"";
-            sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + mqField + proxyField + "}");
+            // Archery：全局开关 && 项目已配置 && 项目开关，任一为假 → archeryEnabled=false
+            Registry.ArcheryProject proj = Registry.getInstance().getArcheryProject(serviceId);
+            boolean archeryOn = Registry.getInstance().isArcheryEnabled()
+                    && proj != null && proj.enabled
+                    && !Registry.getInstance().getArcheryUrl().isEmpty()
+                    && !proj.instanceName.isEmpty();
+            String archeryField = ",\"archeryEnabled\":" + archeryOn
+                    + ",\"archeryUrl\":\"" + escapeJson(Registry.getInstance().getArcheryUrl()) + "\""
+                    + ",\"archeryInstance\":\"" + escapeJson(proj != null ? proj.instanceName : "") + "\""
+                    + ",\"archeryDatabase\":\"" + escapeJson(proj != null ? proj.dbName : "") + "\""
+                    + ",\"archeryHeaders\":\"" + escapeJson(Registry.getInstance().getArcheryHeaders()) + "\""
+                    + ",\"archeryLimit\":" + Registry.getInstance().getArcheryLimit();
+            sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + mqField + proxyField + archeryField + "}");
         }
 
         // ====== 查询某服务的实例 ======
@@ -247,6 +273,76 @@ public class RegistryServer {
             sendJson(ctx, HttpResponseStatus.OK,
                     "{\"success\":true,\"enabled\":" + Registry.getInstance().isOnlineProxyEnabled()
                             + ",\"gatewayUrl\":\"" + escapeJson(Registry.getInstance().getGatewayUrl()) + "\"}");
+        }
+
+        // ====== Archery 全局配置：查询 ======
+        private void handleGetArchery(ChannelHandlerContext ctx) {
+            Registry r = Registry.getInstance();
+            sendJson(ctx, HttpResponseStatus.OK,
+                    "{\"enabled\":" + r.isArcheryEnabled()
+                            + ",\"url\":\"" + escapeJson(r.getArcheryUrl()) + "\""
+                            + ",\"headers\":\"" + escapeJson(r.getArcheryHeaders()) + "\""
+                            + ",\"limit\":" + r.getArcheryLimit() + "}");
+        }
+
+        // ====== Archery 全局配置：更新 ======
+        private void handleUpdateArchery(ChannelHandlerContext ctx, FullHttpRequest request) {
+            Map<String, String> params = parseBody(request);
+            Boolean enabled = params.containsKey("enabled") ? "true".equals(params.get("enabled")) : null;
+            String url = params.get("url");
+            String headers = params.get("headers");
+            Integer limit = null;
+            if (params.get("limit") != null && !params.get("limit").isBlank()) {
+                try { limit = Integer.parseInt(params.get("limit").trim()); } catch (NumberFormatException ignore) {}
+            }
+            Registry.getInstance().updateArcheryGlobal(enabled, url, headers, limit);
+            handleGetArchery(ctx);
+        }
+
+        // ====== Archery 项目配置：新增/更新 ======
+        private void handleUpdateArcheryProject(ChannelHandlerContext ctx, FullHttpRequest request) {
+            Map<String, String> params = parseBody(request);
+            String serviceId = params.get("serviceId");
+            if (serviceId == null || serviceId.isBlank()) {
+                sendJson(ctx, HttpResponseStatus.BAD_REQUEST, "{\"error\":\"缺少 serviceId\"}");
+                return;
+            }
+            String instanceName = params.get("instanceName");
+            String dbName = params.get("dbName");
+            Boolean enabled = params.containsKey("enabled") ? "true".equals(params.get("enabled")) : null;
+            Registry.getInstance().updateArcheryProject(serviceId, instanceName, dbName, enabled);
+            sendJson(ctx, HttpResponseStatus.OK, "{\"success\":true}");
+        }
+
+        // ====== Archery 项目配置：删除 ======
+        private void handleDeleteArcheryProject(ChannelHandlerContext ctx, FullHttpRequest request) {
+            Map<String, String> params = parseBody(request);
+            String serviceId = params.get("serviceId");
+            if (serviceId == null || serviceId.isBlank()) {
+                sendJson(ctx, HttpResponseStatus.BAD_REQUEST, "{\"error\":\"缺少 serviceId\"}");
+                return;
+            }
+            boolean ok = Registry.getInstance().removeArcheryProject(serviceId);
+            sendJson(ctx, HttpResponseStatus.OK, "{\"success\":" + ok + "}");
+        }
+
+        // ====== Archery 项目配置：列表 ======
+        private void handleListArcheryProjects(ChannelHandlerContext ctx) {
+            Map<String, Registry.ArcheryProject> all = Registry.getInstance().getAllArcheryProjects();
+            StringBuilder json = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<String, Registry.ArcheryProject> e : all.entrySet()) {
+                if (!first) json.append(",");
+                first = false;
+                Registry.ArcheryProject p = e.getValue();
+                json.append("\"").append(escapeJson(e.getKey())).append("\":{")
+                        .append("\"instanceName\":\"").append(escapeJson(p.instanceName)).append("\",")
+                        .append("\"dbName\":\"").append(escapeJson(p.dbName)).append("\",")
+                        .append("\"enabled\":").append(p.enabled)
+                        .append("}");
+            }
+            json.append("}");
+            sendJson(ctx, HttpResponseStatus.OK, json.toString());
         }
 
         // ====== 工具方法 ======

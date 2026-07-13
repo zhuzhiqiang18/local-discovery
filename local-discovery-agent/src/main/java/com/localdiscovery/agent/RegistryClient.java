@@ -20,11 +20,26 @@ public class RegistryClient {
         public final boolean mqEnabled;
         public final boolean onlineProxyEnabled;
         public final String gatewayUrl;
+        // Archery 转发配置
+        public final boolean archeryEnabled;
+        public final String archeryUrl;
+        public final String archeryInstance;
+        public final String archeryDatabase;
+        public final String archeryHeaders;
+        public final int archeryLimit;
 
-        public HeartbeatResult(boolean mqEnabled, boolean onlineProxyEnabled, String gatewayUrl) {
+        public HeartbeatResult(boolean mqEnabled, boolean onlineProxyEnabled, String gatewayUrl,
+                               boolean archeryEnabled, String archeryUrl, String archeryInstance,
+                               String archeryDatabase, String archeryHeaders, int archeryLimit) {
             this.mqEnabled = mqEnabled;
             this.onlineProxyEnabled = onlineProxyEnabled;
             this.gatewayUrl = gatewayUrl;
+            this.archeryEnabled = archeryEnabled;
+            this.archeryUrl = archeryUrl;
+            this.archeryInstance = archeryInstance;
+            this.archeryDatabase = archeryDatabase;
+            this.archeryHeaders = archeryHeaders;
+            this.archeryLimit = archeryLimit;
         }
     }
 
@@ -135,7 +150,15 @@ public class RegistryClient {
                     boolean mqEnabled = !response.contains("\"mqEnabled\":false");
                     boolean proxyEnabled = response.contains("\"onlineProxyEnabled\":true");
                     String gatewayUrl = extractJsonString(response, "gatewayUrl");
-                    return new HeartbeatResult(mqEnabled, proxyEnabled, gatewayUrl);
+                    boolean archeryEnabled = response.contains("\"archeryEnabled\":true");
+                    String archeryUrl = extractJsonString(response, "archeryUrl");
+                    String archeryInstance = extractJsonString(response, "archeryInstance");
+                    String archeryDatabase = extractJsonString(response, "archeryDatabase");
+                    String archeryHeaders = extractJsonString(response, "archeryHeaders");
+                    int archeryLimit = extractJsonInt(response, "archeryLimit", 1000);
+                    return new HeartbeatResult(mqEnabled, proxyEnabled, gatewayUrl,
+                            archeryEnabled, archeryUrl, archeryInstance, archeryDatabase,
+                            archeryHeaders, archeryLimit);
                 }
             }
             return null;
@@ -154,6 +177,26 @@ public class RegistryClient {
         int end = json.indexOf('"', start);
         if (end < 0) return "";
         return json.substring(start, end);
+    }
+
+    /** 提取 "key":number；缺失或解析失败返回 defaultValue */
+    private static int extractJsonInt(String json, String key, int defaultValue) {
+        String needle = "\"" + key + "\":";
+        int i = json.indexOf(needle);
+        if (i < 0) return defaultValue;
+        int start = i + needle.length();
+        int end = start;
+        while (end < json.length()) {
+            char c = json.charAt(end);
+            if ((c >= '0' && c <= '9') || c == '-') end++;
+            else break;
+        }
+        if (end == start) return defaultValue;
+        try {
+            return Integer.parseInt(json.substring(start, end));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
 
     private String get(String path) {

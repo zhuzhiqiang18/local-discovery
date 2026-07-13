@@ -129,13 +129,18 @@ public class AgentMain {
                 )
                 .installOn(inst);
 
+        // 8. JDBC 查询转发到 Archery
+        // 拦截器无条件挂载；实际是否转发由 ArcheryConfig.isEnabled() 运行时判定
+        // （由 AgentRegistrar 心跳从注册中心下发）
+        installJdbcInterceptors(inst, safeListener);
+
         // 7. 拦截 feign.Client.execute() → 走网关的请求注入 Authorization
         // 只匹配 feign.* 包下的具体 Client 实现，避开 Spring 的包装类（RetryableFeignBlockingLoadBalancerClient 等）
         // 这些包装类会引入 spring-retry 等可选依赖，若 classpath 里没有会导致 TypePool 解析失败
         new AgentBuilder.Default()
                 .with(safeListener)
                 .type(ElementMatchers.nameStartsWith("feign.")
-                        .and(ElementMatchers.hasSuperType(ElementMatchers.named("feign.Client")))
+                        .and(ElementMatchers.failSafe(ElementMatchers.hasSuperType(ElementMatchers.named("feign.Client"))))
                         .and(ElementMatchers.not(ElementMatchers.isInterface()))
                         .and(ElementMatchers.not(ElementMatchers.isAbstract())))
                 .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
@@ -147,5 +152,82 @@ public class AgentMain {
 
         System.out.println("[LocalDiscovery] Agent 初始化完成");
         System.out.println("[LocalDiscovery] 注册中心: " + registryUrl);
+    }
+
+    /**
+     * 挂 JDBC 查询拦截：
+     *   - Connection.prepareStatement(String,...) → 记录 SQL
+     *   - PreparedStatement.setXxx(int, ?) → 记录参数
+     *   - PreparedStatement.executeQuery() / Statement.executeQuery(String) → 转发到 Archery
+     *
+     * 通过 hasSuperType 匹配所有实现类（MySQL/PostgreSQL/Druid 包装类等）
+     * SqlBridge 内 ThreadLocal 重入保护防止嵌套触发
+     */
+    private static void installJdbcInterceptors(Instrumentation inst, AgentBuilder.Listener listener) {
+        // Connection.prepareStatement(String, ...) — 记录 SQL
+        new AgentBuilder.Default()
+                .with(listener)
+                .ignore(ElementMatchers.nameStartsWith("com.localdiscovery"))
+                .type(ElementMatchers.not(ElementMatchers.isInterface())
+                        .and(ElementMatchers.failSafe(ElementMatchers.hasSuperType(ElementMatchers.named("java.sql.Connection")))))
+                .transform((builder, td, cl, m, pd) ->
+                        builder.visit(Advice.to(JdbcInterceptor.PrepareStatementAdvice.class)
+                                .on(ElementMatchers.named("prepareStatement")
+                                        .and(ElementMatchers.takesArgument(0, String.class))
+                                        .and(ElementMatchers.isPublic())))
+                )
+                .installOn(inst);
+
+        // PreparedStatement.setXxx(int, ?) — 记录参数；execute() / executeQuery() — 拦截
+        new AgentBuilder.Default()
+                .with(listener)
+                .ignore(ElementMatchers.nameStartsWith("com.localdiscovery"))
+                .type(ElementMatchers.not(ElementMatchers.isInterface())
+                        .and(ElementMatchers.failSafe(ElementMatchers.hasSuperType(ElementMatchers.named("java.sql.PreparedStatement")))))
+                .transform((builder, td, cl, m, pd) ->
+                        builder
+                                .visit(Advice.to(JdbcInterceptor.SetParamAdvice.class)
+                                        .on(ElementMatchers.nameStartsWith("set")
+                                                .and(ElementMatchers.takesArguments(2))
+                                                .and(ElementMatchers.takesArgument(0, int.class))
+                                                .and(ElementMatchers.isPublic())))
+                                .visit(Advice.to(JdbcInterceptor.ExecuteQueryPreparedAdvice.class)
+                                        .on(ElementMatchers.named("executeQuery")
+                                                .and(ElementMatchers.takesArguments(0))
+                                                .and(ElementMatchers.isPublic())))
+                                .visit(Advice.to(JdbcInterceptor.ExecutePreparedAdvice.class)
+                                        .on(ElementMatchers.named("execute")
+                                                .and(ElementMatchers.takesArguments(0))
+                                                .and(ElementMatchers.isPublic())))
+                )
+                .installOn(inst);
+
+        // Statement.executeQuery(String) / execute(String) — 无占位符路径
+        // Statement.getResultSet() — MyBatis/Hibernate 走 execute()+getResultSet() 时取暂存的 Archery ResultSet
+        new AgentBuilder.Default()
+                .with(listener)
+                .ignore(ElementMatchers.nameStartsWith("com.localdiscovery"))
+                .type(ElementMatchers.not(ElementMatchers.isInterface())
+                        .and(ElementMatchers.failSafe(ElementMatchers.hasSuperType(ElementMatchers.named("java.sql.Statement")))))
+                .transform((builder, td, cl, m, pd) ->
+                        builder
+                                .visit(Advice.to(JdbcInterceptor.ExecuteQueryStatementAdvice.class)
+                                        .on(ElementMatchers.named("executeQuery")
+                                                .and(ElementMatchers.takesArguments(1))
+                                                .and(ElementMatchers.takesArgument(0, String.class))
+                                                .and(ElementMatchers.isPublic())))
+                                .visit(Advice.to(JdbcInterceptor.ExecuteStatementAdvice.class)
+                                        .on(ElementMatchers.named("execute")
+                                                .and(ElementMatchers.takesArguments(1))
+                                                .and(ElementMatchers.takesArgument(0, String.class))
+                                                .and(ElementMatchers.isPublic())))
+                                .visit(Advice.to(JdbcInterceptor.GetResultSetAdvice.class)
+                                        .on(ElementMatchers.named("getResultSet")
+                                                .and(ElementMatchers.takesArguments(0))
+                                                .and(ElementMatchers.isPublic())))
+                )
+                .installOn(inst);
+
+        System.out.println("[LocalDiscovery] JDBC 查询转发已挂载");
     }
 }

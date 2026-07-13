@@ -5,91 +5,307 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Local Discovery Registry</title>
     <style>
+        :root {
+            --bg: #0b1120;
+            --bg-elev: #111a2e;
+            --surface: #172033;
+            --surface-2: #1e2942;
+            --border: #253148;
+            --border-strong: #334667;
+            --text: #e6edf7;
+            --text-mute: #8b98b0;
+            --text-dim: #5d6a83;
+            --accent: #4f8fff;
+            --accent-2: #7c5cff;
+            --success: #22c55e;
+            --warn: #f59e0b;
+            --danger: #ef4444;
+            --radius: 14px;
+            --radius-sm: 8px;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+            --shadow: 0 4px 24px -8px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.2);
+            --shadow-lg: 0 20px 60px -20px rgba(79,143,255,0.15), 0 8px 24px rgba(0,0,0,0.3);
+            --grad-brand: linear-gradient(135deg, #4f8fff 0%, #7c5cff 100%);
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a; color: #e2e8f0; min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Roboto, sans-serif;
+            font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+            background:
+                radial-gradient(1200px 500px at 15% -10%, rgba(79,143,255,0.12), transparent 60%),
+                radial-gradient(900px 400px at 90% 0%, rgba(124,92,255,0.10), transparent 55%),
+                var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            font-size: 14px;
+            line-height: 1.5;
         }
         .header {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            border-bottom: 1px solid #334155;
-            padding: 20px 32px;
+            position: sticky; top: 0; z-index: 50;
+            backdrop-filter: saturate(140%) blur(12px);
+            -webkit-backdrop-filter: saturate(140%) blur(12px);
+            background: rgba(11,17,32,0.75);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 40px;
             display: flex; align-items: center; justify-content: space-between;
         }
-        .header h1 { font-size: 20px; font-weight: 600; color: #f1f5f9; }
-        .header h1 span { color: #38bdf8; }
-        .stats { display: flex; gap: 24px; }
-        .stat { text-align: center; }
-        .stat-value { font-size: 24px; font-weight: 700; color: #38bdf8; }
-        .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; }
-        .container { max-width: 1000px; margin: 0 auto; padding: 24px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand-logo {
+            width: 32px; height: 32px; border-radius: 9px;
+            background: var(--grad-brand);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 16px rgba(79,143,255,0.35);
+            position: relative;
+        }
+        .brand-logo::after {
+            content: ''; position: absolute; inset: 0; border-radius: 9px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.2), transparent);
+        }
+        .brand-logo svg { width: 18px; height: 18px; color: #fff; position: relative; z-index: 1; }
+        .brand h1 { font-size: 17px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+        .brand .subtitle { font-size: 11px; color: var(--text-dim); margin-top: 1px; letter-spacing: 0.05em; text-transform: uppercase; }
+        .stats { display: flex; gap: 8px; }
+        .stat {
+            padding: 8px 18px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            display: flex; align-items: center; gap: 10px;
+            transition: border-color .15s;
+        }
+        .stat:hover { border-color: var(--border-strong); }
+        .stat-value {
+            font-size: 20px; font-weight: 650; color: var(--text);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+        }
+        .stat-label { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.08em; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 28px 40px 60px; }
         .card {
-            background: #1e293b; border: 1px solid #334155;
-            border-radius: 12px; margin-bottom: 24px; overflow: hidden;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 20px;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow .2s, border-color .2s;
         }
+        .card:hover { box-shadow: var(--shadow); }
         .card-header {
-            padding: 16px 20px; border-bottom: 1px solid #334155;
+            padding: 16px 22px;
+            border-bottom: 1px solid var(--border);
             display: flex; align-items: center; justify-content: space-between;
+            background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
         }
-        .card-header h2 { font-size: 15px; font-weight: 600; color: #f1f5f9; }
-        .card-body { padding: 16px 20px; }
+        .card-header h2 {
+            font-size: 14px; font-weight: 600; color: var(--text);
+            display: flex; align-items: center; gap: 10px;
+            letter-spacing: -0.005em;
+        }
+        .card-header h2::before {
+            content: ''; width: 3px; height: 14px; border-radius: 2px;
+            background: var(--grad-brand);
+        }
+        .card-header .hint { font-size: 12px; color: var(--text-dim); font-weight: 500; }
+        .card-body { padding: 18px 22px; }
+        .card-body.p0 { padding: 0; }
+        .card-desc { font-size: 12.5px; color: var(--text-mute); padding: 8px 2px 2px; line-height: 1.6; }
+
         table { width: 100%; border-collapse: collapse; }
-        th {
-            text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 600;
-            color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
-            border-bottom: 1px solid #334155;
+        thead th {
+            text-align: left; padding: 12px 20px; font-size: 11px; font-weight: 600;
+            color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em;
+            background: rgba(255,255,255,0.015);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
         }
-        td { padding: 12px; font-size: 14px; border-bottom: 1px solid #1e293b40; }
-        tr:hover td { background: #1e293b80; }
+        tbody td {
+            padding: 14px 20px; font-size: 13.5px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        tbody td:nth-child(2) { white-space: normal; word-break: break-all; }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr { transition: background .15s; }
+        tbody tr:hover td { background: rgba(79,143,255,0.04); }
+
+        .svc-name { display: flex; align-items: center; gap: 10px; }
+        .svc-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--success); flex-shrink: 0;
+            box-shadow: 0 0 0 3px rgba(34,197,94,0.15);
+        }
+        .svc-dot.off { background: var(--text-dim); box-shadow: 0 0 0 3px rgba(93,106,131,0.15); }
+        .svc-dot.exp { background: var(--danger); box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+
         .tag {
-            display: inline-block; padding: 2px 10px; border-radius: 9999px;
-            font-size: 12px; font-weight: 500;
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 10px; border-radius: 6px;
+            font-size: 11.5px; font-weight: 550;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
         }
-        .tag-up { background: #052e16; color: #4ade80; border: 1px solid #166534; }
-        .tag-down { background: #450a0a; color: #f87171; border: 1px solid #991b1b; }
-        .tag-disabled { background: #1c1917; color: #a8a29e; border: 1px solid #44403c; }
+        .tag-up { background: rgba(34,197,94,0.12); color: #4ade80; }
+        .tag-down { background: rgba(239,68,68,0.12); color: #fca5a5; }
+        .tag-disabled { background: rgba(148,163,184,0.10); color: #94a3b8; }
+        .tag-info { background: rgba(79,143,255,0.12); color: #93c5fd; }
+
         .btn {
-            padding: 6px 14px; border: none; border-radius: 6px;
-            font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+            padding: 7px 14px; border: 1px solid transparent; border-radius: 7px;
+            font-size: 13px; font-weight: 550; cursor: pointer;
+            transition: all .15s cubic-bezier(.2,.8,.2,1);
+            display: inline-flex; align-items: center; gap: 6px;
+            font-family: inherit;
+            line-height: 1.2;
         }
-        .btn:hover { filter: brightness(1.15); }
-        .btn-primary { background: #0ea5e9; color: #fff; }
-        .btn-danger { background: #dc2626; color: #fff; }
-        .btn-warning { background: #d97706; color: #fff; }
-        .btn-success { background: #16a34a; color: #fff; }
-        .btn-sm { padding: 4px 10px; font-size: 12px; }
-        .btn-group { display: flex; gap: 6px; }
+        .btn:active { transform: translateY(1px); }
+        .btn-primary { background: var(--grad-brand); color: #fff; box-shadow: 0 2px 8px rgba(79,143,255,0.25); }
+        .btn-primary:hover { box-shadow: 0 4px 14px rgba(79,143,255,0.4); }
+        .btn-danger { background: rgba(239,68,68,0.12); color: #fca5a5; border-color: rgba(239,68,68,0.25); }
+        .btn-danger:hover { background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.4); }
+        .btn-warning { background: rgba(245,158,11,0.12); color: #fbbf24; border-color: rgba(245,158,11,0.25); }
+        .btn-warning:hover { background: rgba(245,158,11,0.2); border-color: rgba(245,158,11,0.4); }
+        .btn-success { background: rgba(34,197,94,0.14); color: #4ade80; border-color: rgba(34,197,94,0.28); }
+        .btn-success:hover { background: rgba(34,197,94,0.22); border-color: rgba(34,197,94,0.45); }
+        .btn-ghost { background: transparent; color: var(--text-mute); border-color: var(--border); }
+        .btn-ghost:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-group { display: inline-flex; gap: 6px; }
+
         .form-row {
-            display: flex; gap: 10px; align-items: center; padding: 12px 0;
+            display: flex; gap: 10px; align-items: center;
         }
-        .form-row input {
-            flex: 1; padding: 8px 12px; background: #0f172a;
-            border: 1px solid #334155; border-radius: 6px;
-            color: #e2e8f0; font-size: 14px; outline: none;
+        .form-row + .form-row { margin-top: 10px; }
+        input[type="text"], input[type="number"] {
+            flex: 1; padding: 9px 12px;
+            background: var(--bg-elev);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text); font-size: 13.5px;
+            outline: none;
+            transition: border-color .15s, box-shadow .15s, background .15s;
+            font-family: inherit;
+            min-width: 0;
         }
-        .form-row input:focus { border-color: #0ea5e9; }
-        .form-row input::placeholder { color: #475569; }
-        .empty { text-align: center; padding: 40px; color: #475569; font-size: 14px; }
+        input[type="text"]:hover, input[type="number"]:hover { border-color: var(--border-strong); }
+        input[type="text"]:focus, input[type="number"]:focus {
+            border-color: var(--accent);
+            background: var(--surface);
+            box-shadow: 0 0 0 3px rgba(79,143,255,0.15);
+        }
+        input::placeholder { color: var(--text-dim); }
+        input[type="checkbox"] {
+            width: 15px; height: 15px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        code {
+            font-family: 'SF Mono', Monaco, Consolas, 'Courier New', monospace;
+            color: #c4b5fd;
+            font-size: 12.5px;
+            background: rgba(124,92,255,0.08);
+            padding: 1px 6px;
+            border-radius: 4px;
+        }
+
+        .empty {
+            text-align: center; padding: 60px 20px;
+            color: var(--text-dim); font-size: 13.5px;
+        }
+        .empty-icon {
+            width: 48px; height: 48px; margin: 0 auto 16px;
+            border-radius: 50%;
+            background: var(--surface-2);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-dim);
+        }
+        .empty p { margin-bottom: 12px; }
+
         .heartbeat-bar {
-            width: 60px; height: 6px; border-radius: 3px; background: #334155; overflow: hidden;
-            display: inline-block; vertical-align: middle; margin-left: 6px;
+            width: 68px; height: 5px; border-radius: 3px;
+            background: rgba(255,255,255,0.06);
+            overflow: hidden;
+            display: inline-block; vertical-align: middle;
+            margin-left: 8px;
         }
-        .heartbeat-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .heartbeat-fill { height: 100%; border-radius: 3px; transition: width .3s ease; }
+
         .toast {
-            position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
-            border-radius: 8px; font-size: 14px; color: #fff;
-            opacity: 0; transform: translateY(10px); transition: all 0.3s; z-index: 9999;
+            position: fixed; bottom: 24px; right: 24px;
+            padding: 12px 18px 12px 14px;
+            border-radius: 10px; font-size: 13.5px; font-weight: 500;
+            color: #fff;
+            opacity: 0; transform: translateY(12px) scale(.98);
+            transition: all .28s cubic-bezier(.2,.8,.2,1);
+            z-index: 9999;
+            display: flex; align-items: center; gap: 10px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255,255,255,0.08);
+            max-width: 420px;
         }
-        .toast.show { opacity: 1; transform: translateY(0); }
-        .toast-success { background: #16a34a; }
-        .toast-error { background: #dc2626; }
-        code { color: #94a3b8; font-size: 13px; }
+        .toast.show { opacity: 1; transform: translateY(0) scale(1); }
+        .toast-success { background: linear-gradient(135deg, #16a34a, #15803d); }
+        .toast-error { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+        .toast::before {
+            content: ''; width: 6px; height: 6px; border-radius: 50%;
+            background: rgba(255,255,255,0.9); flex-shrink: 0;
+        }
+
+        .status-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 3px 10px; border-radius: 999px;
+            font-size: 11.5px; font-weight: 550;
+            background: rgba(255,255,255,0.04);
+            color: var(--text-mute);
+            border: 1px solid var(--border);
+        }
+        .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .status-pill.active { color: #4ade80; border-color: rgba(34,197,94,0.35); background: rgba(34,197,94,0.08); }
+
+        .expand-row td {
+            background: linear-gradient(180deg, var(--bg-elev), rgba(11,17,32,0.6)) !important;
+            padding: 16px 22px !important;
+            border-top: 1px dashed var(--border);
+        }
+        .expand-label {
+            font-size: 11px; color: var(--text-dim);
+            text-transform: uppercase; letter-spacing: 0.08em;
+            font-weight: 600;
+            min-width: 90px;
+        }
+
+        @media (max-width: 1200px) {
+            .container { max-width: 100%; padding: 24px 24px 40px; }
+        }
+        @media (max-width: 900px) {
+            .header { padding: 14px 20px; }
+            .container { padding: 20px 16px 40px; }
+            .stats { flex-wrap: wrap; }
+            thead { display: none; }
+            tbody tr, tbody td { display: block; }
+            tbody td { padding: 8px 16px; border-bottom: none; white-space: normal; }
+            tbody tr { border-bottom: 1px solid var(--border); padding: 8px 0; }
+        }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h1><span>&#9679;</span> Local Discovery Registry</h1>
+    <div class="brand">
+        <div class="brand-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"></path>
+            </svg>
+        </div>
+        <div>
+            <h1>Local Discovery Registry</h1>
+            <div class="subtitle">零侵入本地微服务注册中心</div>
+        </div>
+    </div>
     <div class="stats">
         <div class="stat">
             <div class="stat-value" id="statServices">0</div>
@@ -106,17 +322,39 @@
     <!-- 网关代理开关 -->
     <div class="card">
         <div class="card-header">
-            <h2>网关代理（本地找不到 → 走线上网关）</h2>
-            <span id="proxyStatus" style="font-size:12px;color:#64748b">关闭</span>
+            <h2>网关代理</h2>
+            <span id="proxyStatus" class="status-pill"><span class="dot"></span>关闭</span>
         </div>
         <div class="card-body">
             <div class="form-row">
                 <input type="text" id="gatewayUrl" placeholder="网关地址，例如 https://api.prod.com" />
                 <button class="btn btn-success" onclick="updateProxy(true)">开启并保存</button>
-                <button class="btn btn-danger" onclick="updateProxy(false)">关闭</button>
+                <button class="btn btn-ghost" onclick="updateProxy(false)">关闭</button>
             </div>
-            <div style="font-size:12px;color:#64748b;padding:4px 2px 0">
-                开启后：本地未注册的服务调用 → 拼到网关地址上；仅当调用线程持有 Authorization 时才走网关，否则忽略。开启时会联动关闭所有实例的 MQ 消费。
+            <div class="card-desc">
+                开启后：本地未注册的服务调用 → 拼到网关地址上；仅当调用线程持有 <code>Authorization</code> 时才走网关，否则忽略。开启时会联动关闭所有实例的 MQ 消费。
+            </div>
+        </div>
+    </div>
+
+    <!-- Archery SQL 转发（全局） -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Archery SQL 查询转发</h2>
+            <span id="archeryStatus" class="status-pill"><span class="dot"></span>关闭</span>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <input type="text" id="archeryUrl" placeholder="Archery 地址，例如 http://archery.internal" />
+                <input type="number" id="archeryLimit" placeholder="行数上限" style="max-width:130px" />
+            </div>
+            <div class="form-row">
+                <input type="text" id="archeryHeaders" placeholder="请求头  例如：csrftoken=xxx; sessionid=yyy" />
+                <button class="btn btn-success" onclick="updateArchery(true)">开启并保存</button>
+                <button class="btn btn-ghost" onclick="updateArchery(false)">关闭</button>
+            </div>
+            <div class="card-desc">
+                开启后：拦截应用的 SELECT/SHOW/DESC/EXPLAIN 语句 → 转发到 Archery <code>/query/</code>。每个服务需在下方"已注册服务"里单独填写对应的 instance_name 和 db_name。
             </div>
         </div>
     </div>
@@ -125,9 +363,9 @@
     <div class="card">
         <div class="card-header">
             <h2>已注册服务</h2>
-            <span style="font-size:12px;color:#64748b">每 2 秒刷新</span>
+            <span class="hint">每 2 秒刷新</span>
         </div>
-        <div class="card-body" style="padding:0">
+        <div class="card-body p0">
             <table>
                 <thead>
                     <tr>
@@ -135,6 +373,7 @@
                         <th>地址</th>
                         <th>状态</th>
                         <th>MQ</th>
+                        <th>Archery</th>
                         <th>心跳</th>
                         <th style="text-align:right">操作</th>
                     </tr>
@@ -142,10 +381,13 @@
                 <tbody id="instanceTable"></tbody>
             </table>
             <div id="emptyState" class="empty">
-                暂无服务注册<br>
-                <code style="margin-top:8px;display:inline-block">
-                    在服务启动参数加 -javaagent:local-discovery-agent.jar 即可自动注册
-                </code>
+                <div class="empty-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                </div>
+                <p>暂无服务注册</p>
+                <code>-javaagent:local-discovery-agent.jar</code>
             </div>
         </div>
     </div>
@@ -170,11 +412,21 @@
 
 <script>
     const API = '';
+    // serviceId -> {instanceName, dbName, enabled}
+    let archeryProjects = {};
+    // 展开状态：serviceId -> boolean
+    const expanded = {};
+    // 输入框草稿：serviceId -> { instanceName, dbName, enabled }，避免 2 秒轮询重渲染时冲掉未保存的输入
+    const archeryDrafts = {};
 
     async function loadAll() {
         try {
-            const res = await fetch(API + '/api/all');
-            const data = await res.json();
+            const [allRes, projRes] = await Promise.all([
+                fetch(API + '/api/all'),
+                fetch(API + '/api/archeryProjects').catch(() => null)
+            ]);
+            const data = await allRes.json();
+            archeryProjects = (projRes && projRes.ok) ? await projRes.json() : {};
 
             document.getElementById('statServices').textContent = data.totalServices;
             document.getElementById('statInstances').textContent = data.totalInstances;
@@ -190,51 +442,156 @@
             empty.style.display = 'none';
 
             const now = Date.now();
-            tbody.innerHTML = data.instances.map(inst => {
-                const ago = Math.floor((now - inst.lastHeartbeat) / 1000);
-                const ratio = Math.max(0, Math.min(100, (15 - ago) / 15 * 100));
-                const barColor = ratio > 60 ? '#22c55e' : ratio > 30 ? '#eab308' : '#ef4444';
-                const statusTag = inst.expired
-                    ? '<span class="tag tag-down">已过期</span>'
-                    : inst.enabled
-                        ? '<span class="tag tag-up">在线</span>'
-                        : '<span class="tag tag-disabled">已停用</span>';
-                const mqTag = inst.mqEnabled
-                    ? '<span class="tag tag-up">消费中</span>'
-                    : '<span class="tag tag-disabled">已暂停</span>';
-
-                return `<tr>
-                    <td><strong>${esc(inst.serviceId)}</strong></td>
-                    <td><code>${esc(inst.uri)}</code></td>
-                    <td>${statusTag}</td>
-                    <td>${mqTag}</td>
-                    <td>
-                        ${ago}秒前
-                        <div class="heartbeat-bar">
-                            <div class="heartbeat-fill" style="width:${ratio}%;background:${barColor}"></div>
-                        </div>
-                    </td>
-                    <td style="text-align:right">
-                        <div class="btn-group" style="justify-content:flex-end">
-                            <button class="btn btn-sm ${inst.mqEnabled ? 'btn-warning' : 'btn-success'}"
-                                onclick="toggleMq('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port},${!inst.mqEnabled})">
-                                ${inst.mqEnabled ? 'MQ停用' : 'MQ启用'}
-                            </button>
-                            <button class="btn btn-sm ${inst.enabled ? 'btn-warning' : 'btn-success'}"
-                                onclick="toggle('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port},${!inst.enabled})">
-                                ${inst.enabled ? '停用' : '启用'}
-                            </button>
-                            <button class="btn btn-sm btn-danger"
-                                onclick="deregister('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port})">
-                                注销
-                            </button>
-                        </div>
-                    </td>
-                </tr>`;
-            }).join('');
+            captureArcheryDrafts();
+            tbody.innerHTML = data.instances.map(inst => renderRow(inst, now)).join('');
         } catch (e) {
             // 注册中心可能还没启动完
         }
+    }
+
+    function renderRow(inst, now) {
+        const ago = Math.floor((now - inst.lastHeartbeat) / 1000);
+        const ratio = Math.max(0, Math.min(100, (15 - ago) / 15 * 100));
+        const barColor = ratio > 60 ? '#22c55e' : ratio > 30 ? '#f59e0b' : '#ef4444';
+        const dotCls = inst.expired ? 'exp' : (inst.enabled ? '' : 'off');
+        const statusTag = inst.expired
+            ? '<span class="tag tag-down">已过期</span>'
+            : inst.enabled
+                ? '<span class="tag tag-up">在线</span>'
+                : '<span class="tag tag-disabled">已停用</span>';
+        const mqTag = inst.mqEnabled
+            ? '<span class="tag tag-up">消费中</span>'
+            : '<span class="tag tag-disabled">已暂停</span>';
+
+        const proj = archeryProjects[inst.serviceId];
+        let archeryTag;
+        if (!proj) {
+            archeryTag = '<span class="tag tag-disabled">未配置</span>';
+        } else if (proj.enabled && proj.instanceName) {
+            archeryTag = '<span class="tag tag-info">' + esc(proj.instanceName) + ' / ' + esc(proj.dbName || '-') + '</span>';
+        } else {
+            archeryTag = '<span class="tag tag-disabled">已停用</span>';
+        }
+
+        const rows = [];
+        rows.push(`<tr>
+            <td>
+                <div class="svc-name">
+                    <span class="svc-dot ${dotCls}"></span>
+                    <strong>${esc(inst.serviceId)}</strong>
+                </div>
+            </td>
+            <td><code>${esc(inst.uri)}</code></td>
+            <td>${statusTag}</td>
+            <td>${mqTag}</td>
+            <td>${archeryTag}</td>
+            <td style="color:var(--text-mute);font-size:12.5px;white-space:nowrap">
+                ${ago}秒前
+                <div class="heartbeat-bar">
+                    <div class="heartbeat-fill" style="width:${ratio}%;background:${barColor}"></div>
+                </div>
+            </td>
+            <td style="text-align:right">
+                <div class="btn-group" style="justify-content:flex-end">
+                    <button class="btn btn-sm btn-ghost"
+                        onclick="toggleExpand('${esc(inst.serviceId)}')">
+                        ${expanded[inst.serviceId] ? '收起' : 'Archery'}
+                    </button>
+                    <button class="btn btn-sm ${inst.mqEnabled ? 'btn-warning' : 'btn-success'}"
+                        onclick="toggleMq('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port},${!inst.mqEnabled})">
+                        ${inst.mqEnabled ? 'MQ停用' : 'MQ启用'}
+                    </button>
+                    <button class="btn btn-sm ${inst.enabled ? 'btn-warning' : 'btn-success'}"
+                        onclick="toggle('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port},${!inst.enabled})">
+                        ${inst.enabled ? '停用' : '启用'}
+                    </button>
+                    <button class="btn btn-sm btn-danger"
+                        onclick="deregister('${esc(inst.serviceId)}','${esc(inst.host)}',${inst.port})">
+                        注销
+                    </button>
+                </div>
+            </td>
+        </tr>`);
+
+        if (expanded[inst.serviceId]) {
+            const base = proj || { instanceName: '', dbName: '', enabled: true };
+            const draft = archeryDrafts[inst.serviceId];
+            const p = draft ? { ...base, ...draft } : base;
+            const inputId = 'proj-' + hashKey(inst.serviceId);
+            rows.push(`<tr class="expand-row"><td colspan="7">
+                <div class="form-row" style="flex-wrap:wrap">
+                    <span class="expand-label">Archery 项目</span>
+                    <input type="text" id="${inputId}-inst" placeholder="instance_name" value="${esc(p.instanceName)}" style="max-width:220px" />
+                    <input type="text" id="${inputId}-db" placeholder="db_name" value="${esc(p.dbName)}" style="max-width:220px" />
+                    <label style="font-size:13px;color:var(--text-mute);display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="checkbox" id="${inputId}-en" ${p.enabled ? 'checked' : ''} /> 启用
+                    </label>
+                    <button class="btn btn-sm btn-success" onclick="saveArcheryProject('${esc(inst.serviceId)}','${inputId}')">保存</button>
+                    ${proj ? `<button class="btn btn-sm btn-danger" onclick="deleteArcheryProject('${esc(inst.serviceId)}')">删除</button>` : ''}
+                </div>
+            </td></tr>`);
+        }
+        return rows.join('');
+    }
+
+    // 重渲染前抓取当前所有展开输入框里的值，作为草稿保留
+    function captureArcheryDrafts() {
+        Object.keys(expanded).forEach(serviceId => {
+            if (!expanded[serviceId]) return;
+            const inputId = 'proj-' + hashKey(serviceId);
+            const instEl = document.getElementById(inputId + '-inst');
+            const dbEl = document.getElementById(inputId + '-db');
+            const enEl = document.getElementById(inputId + '-en');
+            if (!instEl && !dbEl && !enEl) return;
+            archeryDrafts[serviceId] = {
+                instanceName: instEl ? instEl.value : '',
+                dbName: dbEl ? dbEl.value : '',
+                enabled: enEl ? enEl.checked : true
+            };
+        });
+    }
+
+    function toggleExpand(serviceId) {
+        expanded[serviceId] = !expanded[serviceId];
+        if (!expanded[serviceId]) delete archeryDrafts[serviceId];
+        loadAll();
+    }
+
+    async function saveArcheryProject(serviceId, inputId) {
+        const instanceName = document.getElementById(inputId + '-inst').value.trim();
+        const dbName = document.getElementById(inputId + '-db').value.trim();
+        const enabled = document.getElementById(inputId + '-en').checked;
+        if (!instanceName) { showToast('请填写 instance_name', 'error'); return; }
+        const res = await fetch(API + '/api/archeryProject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `serviceId=${enc(serviceId)}&instanceName=${enc(instanceName)}&dbName=${enc(dbName)}&enabled=${enabled}`
+        });
+        if (res.ok) {
+            showToast(`已保存 ${serviceId} 的 Archery 配置`, 'success');
+            delete archeryDrafts[serviceId];
+            loadAll();
+        }
+    }
+
+    async function deleteArcheryProject(serviceId) {
+        const res = await fetch(API + '/api/archeryProject', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `serviceId=${enc(serviceId)}`
+        });
+        if (res.ok) {
+            showToast(`已删除 ${serviceId} 的 Archery 配置`, 'success');
+            delete archeryDrafts[serviceId];
+            expanded[serviceId] = false;
+            loadAll();
+        }
+    }
+
+    function hashKey(s) {
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+        return Math.abs(h).toString(36);
     }
 
     async function manualRegister() {
@@ -291,10 +648,11 @@
             const res = await fetch(API + '/api/onlineProxy');
             const data = await res.json();
             const input = document.getElementById('gatewayUrl');
-            if (document.activeElement !== input) input.value = data.gatewayUrl || '';
-            document.getElementById('proxyStatus').textContent =
-                data.enabled ? '开启 → ' + (data.gatewayUrl || '(未配置网关)') : '关闭';
-            document.getElementById('proxyStatus').style.color = data.enabled ? '#4ade80' : '#64748b';
+            if (!input.value && document.activeElement !== input) input.value = data.gatewayUrl || '';
+            const pill = document.getElementById('proxyStatus');
+            pill.innerHTML = '<span class="dot"></span>'
+                + (data.enabled ? '开启 · ' + esc(data.gatewayUrl || '未配置') : '关闭');
+            pill.className = 'status-pill' + (data.enabled ? ' active' : '');
         } catch (e) {}
     }
 
@@ -313,19 +671,55 @@
         }
     }
 
+    async function loadArchery() {
+        try {
+            const res = await fetch(API + '/api/archery');
+            const data = await res.json();
+            const urlInput = document.getElementById('archeryUrl');
+            const headersInput = document.getElementById('archeryHeaders');
+            const limitInput = document.getElementById('archeryLimit');
+            if (!urlInput.value && document.activeElement !== urlInput) urlInput.value = data.url || '';
+            if (!headersInput.value && document.activeElement !== headersInput) headersInput.value = data.headers || '';
+            if (!limitInput.value && document.activeElement !== limitInput) limitInput.value = data.limit || 1000;
+            const pill = document.getElementById('archeryStatus');
+            pill.innerHTML = '<span class="dot"></span>'
+                + (data.enabled ? '开启 · ' + esc(data.url || '未配置') : '关闭');
+            pill.className = 'status-pill' + (data.enabled ? ' active' : '');
+        } catch (e) {}
+    }
+
+    async function updateArchery(enabled) {
+        const url = document.getElementById('archeryUrl').value.trim();
+        const headers = document.getElementById('archeryHeaders').value.trim();
+        const limit = document.getElementById('archeryLimit').value.trim() || '1000';
+        if (enabled && !url) { showToast('请填写 Archery 地址', 'error'); return; }
+        const res = await fetch(API + '/api/archery', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `enabled=${enabled}&url=${enc(url)}&headers=${enc(headers)}&limit=${enc(limit)}`
+        });
+        if (res.ok) {
+            showToast(enabled ? 'Archery 转发已开启' : 'Archery 转发已关闭', 'success');
+            loadArchery();
+            loadAll();
+        }
+    }
+
     function showToast(msg, type) {
         const t = document.getElementById('toast');
         t.textContent = msg;
         t.className = `toast toast-${type} show`;
         setTimeout(() => { t.className = 'toast'; }, 2500);
     }
-    function esc(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
     function enc(s) { return encodeURIComponent(s); }
 
     loadAll();
     loadProxy();
+    loadArchery();
     setInterval(loadAll, 2000);
     setInterval(loadProxy, 5000);
+    setInterval(loadArchery, 5000);
 </script>
 </body>
 </html>

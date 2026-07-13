@@ -59,9 +59,12 @@ public class AgentRegistrar {
                     client.register(serviceId, host, port);
                     registered = true;
                 } else {
-                    // 根据注册中心下发的状态控制本地 MQ 消费 & 网关代理
+                    // 根据注册中心下发的状态控制本地 MQ 消费 & 网关代理 & Archery
                     MqBridge.setMqEnabled(result.mqEnabled);
                     OnlineProxyBridge.update(result.onlineProxyEnabled, result.gatewayUrl);
+                    ArcheryConfig.update(result.archeryEnabled, result.archeryUrl,
+                            result.archeryInstance, result.archeryDatabase,
+                            result.archeryHeaders, result.archeryLimit);
                 }
             }
         }, 5, 5, TimeUnit.SECONDS);

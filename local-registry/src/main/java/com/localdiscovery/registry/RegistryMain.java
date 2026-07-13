@@ -27,6 +27,9 @@ public class RegistryMain {
         // 启动过期检测
         Registry.getInstance().startEviction();
 
+        // 加载持久化配置（Archery / 网关代理）
+        ConfigStore.load();
+
         // 启动 HTTP 服务（阻塞）
         RegistryServer.start(port);
     }
